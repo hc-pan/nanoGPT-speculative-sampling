@@ -85,16 +85,40 @@ if start.startswith('FILE:'):
 start_ids = encode(start)
 x = (torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...])
 
+K=2
 # run generation
 with torch.no_grad():
     with ctx:
         for k in range(num_samples):
             while True:
-                x_draft = model.generate(x, 1, temperature=temperature, top_k=top_k)
-                probs = model.generate_prob(x_draft, temperature=temperature, top_k=top_k)
-                x_draft_next = torch.multinomial(probs[:,-1,:], num_samples=1)
+                n = x.size()[-1]
+                #Sample draft auto-regressively to get K new tokens
+                x_draft = draft_model.generate(x, K-1, temperature=temperature, top_k=top_k)
+                p_draft = draft_model.generate_prob(x_draft, temperature=temperature, top_k=top_k)
+                x_draft_next = torch.multinomial(p_draft[:,-1,:], num_samples=1)
                 x_draft = torch.cat((x_draft, x_draft_next), dim=1)
-                x = x_draft
-                print(decode(x_draft[0].tolist()))
+                #In parallel, compute K + 1 sets of logits from drafts
+                p_target = model.generate_prob(x_draft, temperature=temperature, top_k=top_k)
+                accept_all_draft = True
+                
+                for t in range(K):
+                    #accept or reject for the time_index token
+                    time_index = n+t
+                    token_index = x_draft[0,time_index]
+                    #accept
+                    if torch.rand(1) < min(1,p_target[0,time_index-1,token_index] / p_draft[0,time_index-1,token_index]):
+                        x=torch.cat((x,x_draft[:,[time_index]]),dim=1)
+                    #reject
+                    else:
+                        accept_all_draft = False
+                        p_resample = torch.max(0,p_target[:,time_index-1,:] - p_draft[:,time_index-1,:])
+                        x_next = torch.multinomial(p_resample, num_samples=1)
+                        x=torch.cat((x,x_next),dim=1)
+                        break
+                if accept_all_draft:
+                    x_next = torch.multinomial(p_target[:,-1,:], num_samples=1)
+                    x = torch.cat((x, x_next), dim=1)
+                
+                print(decode(x[0].tolist()))
                 print('---------------')
             
