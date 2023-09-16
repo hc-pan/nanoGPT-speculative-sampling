@@ -91,9 +91,10 @@ with torch.no_grad():
         for k in range(num_samples):
             while True:
                 x_draft = model.generate(x, 1, temperature=temperature, top_k=top_k)
-                prob = model.generate_prob(x, temperature=temperature, top_k=top_k)
+                probs = model.generate_prob(x_draft, temperature=temperature, top_k=top_k)
                 x_draft_next = torch.multinomial(probs[:,-1,:], num_samples=1)
                 x_draft = torch.cat((x_draft, x_draft_next), dim=1)
-                print(decode(y[0].tolist()))
+                x = x_draft
+                print(decode(x_draft[0].tolist()))
                 print('---------------')
             
