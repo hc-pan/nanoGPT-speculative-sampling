@@ -111,7 +111,7 @@ with torch.no_grad():
                     #reject
                     else:
                         accept_all_draft = False
-                        p_resample = torch.max(0,p_target[:,time_index-1,:] - p_draft[:,time_index-1,:])
+                        p_resample = torch.max(torch.tensor(0,device=device),p_target[:,time_index-1,:] - p_draft[:,time_index-1,:])
                         x_next = torch.multinomial(p_resample, num_samples=1)
                         x=torch.cat((x,x_next),dim=1)
                         break
